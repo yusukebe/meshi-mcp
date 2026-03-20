@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>写真アップロード</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, sans-serif; padding: 16px; color: #333; }
+      h2 { font-size: 16px; margin-bottom: 12px; }
+      .form-group { margin-bottom: 12px; }
+      label { display: block; font-size: 13px; margin-bottom: 4px; color: #666; }
+      input[type="file"] { width: 100%; padding: 8px; border: 1px dashed #ccc; border-radius: 8px; background: #fafafa; }
+      input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+      button { width: 100%; padding: 10px; background: #e85d3a; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; }
+      button:disabled { background: #ccc; }
+      button:hover:not(:disabled) { background: #d14e2d; }
+      .preview { max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 8px; display: none; }
+      .status { margin-top: 12px; font-size: 13px; padding: 8px; border-radius: 6px; display: none; }
+      .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
+      .status.error { display: block; background: #ffebee; color: #c62828; }
+      .status.loading { display: block; background: #e3f2fd; color: #1565c0; }
+    </style>
+  </head>
+  <body>
+    <h2>写真アップロード</h2>
+    <div class="form-group">
+      <label>写真を選択</label>
+      <input type="file" id="photo" accept="image/*" />
+      <img id="preview" class="preview" />
+    </div>
+    <div class="form-group">
+      <label>キャプション（任意）</label>
+      <input type="text" id="caption" placeholder="例: チャーシューめん" />
+    </div>
+    <button id="upload-btn" disabled>アップロード</button>
+    <div id="status" class="status"></div>
+    <script type="module" src="/src/mcp-app.ts"></script>
+  </body>
+</html>

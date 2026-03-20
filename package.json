@@ -2,14 +2,23 @@
   "name": "meshi-mcp",
   "type": "module",
   "scripts": {
+    "build": "vite build",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
+    "deploy": "$npm_execpath run build && wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
-    "hono": "^4.12.8"
+    "@cfworker/json-schema": "^4.1.1",
+    "@hono/mcp": "^0.2.4",
+    "@modelcontextprotocol/ext-apps": "^1.2.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/server": "https://pkg.pr.new/modelcontextprotocol/typescript-sdk/@modelcontextprotocol/server@00249ce",
+    "hono": "^4.12.8",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "vite": "^8.0.1",
+    "vite-plugin-singlefile": "^2.3.2",
     "wrangler": "^4.4.0"
   }
 }

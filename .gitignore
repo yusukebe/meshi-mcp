@@ -32,5 +32,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# images
+*.jpg
+*.jpeg
+*.png
+
 # misc
 .DS_Store
