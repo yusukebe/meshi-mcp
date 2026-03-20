@@ -4,6 +4,7 @@ import { McpServer, WebStandardStreamableHTTPServerTransport } from '@modelconte
 import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server'
 import { z } from 'zod'
 import uploadPhotoHtml from '../dist/index.html'
+import viewPhotosHtml from '../dist-photos/photos.html'
 
 type Bindings = {
   DB: D1Database
@@ -13,7 +14,6 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.use(
-  '/mcp',
   cors({
     origin: '*',
     allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
@@ -300,6 +300,70 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
     })
   )
 
+  // MCP Apps: 写真表示UI
+  const viewPhotosResourceUri = 'ui://meshi-mcp/view-photos'
+
+  registerAppTool(server,
+    'view_photos',
+    {
+      title: '写真表示',
+      description: '飯屋の写真をギャラリー形式で表示する。写真一覧をUIで閲覧できる。',
+      inputSchema: {
+        restaurant_id: z.number().int().describe('飯屋のID'),
+      },
+      outputSchema: z.object({
+        restaurant_id: z.number(),
+        restaurant_name: z.string(),
+        base_url: z.string(),
+        photo_count: z.number(),
+      }),
+      _meta: { ui: { resourceUri: viewPhotosResourceUri } },
+    },
+    async ({ restaurant_id }) => {
+      const restaurant = await db.prepare('SELECT id, name FROM restaurants WHERE id = ?').bind(restaurant_id).first()
+      if (!restaurant) {
+        return { content: [{ type: 'text' as const, text: `ID ${restaurant_id} の飯屋は見つかりませんでした` }] }
+      }
+      const r = restaurant as Record<string, unknown>
+
+      const { results: photos } = await db
+        .prepare('SELECT id FROM photos WHERE restaurant_id = ?')
+        .bind(restaurant_id)
+        .all()
+
+      return {
+        content: [{ type: 'text' as const, text: `${r.name} の写真を表示中（${photos.length}枚）` }],
+        structuredContent: {
+          restaurant_id,
+          restaurant_name: r.name as string,
+          base_url: baseUrl,
+          photo_count: photos.length,
+        },
+      }
+    }
+  )
+
+  registerAppResource(server,
+    viewPhotosResourceUri,
+    viewPhotosResourceUri,
+    { mimeType: RESOURCE_MIME_TYPE },
+    async () => ({
+      contents: [{
+        uri: viewPhotosResourceUri,
+        mimeType: RESOURCE_MIME_TYPE,
+        text: viewPhotosHtml,
+        _meta: {
+          ui: {
+            csp: {
+              connectDomains: [baseUrl],
+              resourceDomains: [baseUrl],
+            },
+          },
+        },
+      }],
+    })
+  )
+
   server.registerTool(
     'get_photos',
     {
@@ -357,6 +421,16 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
   return server
 }
 
+// 写真一覧: GET /restaurants/:id/photos
+app.get('/restaurants/:id/photos', async (c) => {
+  const restaurantId = Number(c.req.param('id'))
+  const { results } = await c.env.DB
+    .prepare('SELECT id, caption, created_at FROM photos WHERE restaurant_id = ? ORDER BY created_at DESC')
+    .bind(restaurantId)
+    .all()
+  return c.json(results)
+})
+
 // 写真アップロード: POST /restaurants/:id/photos (multipart/form-data)
 app.post('/restaurants/:id/photos', async (c) => {
   const restaurantId = Number(c.req.param('id'))
@@ -405,13 +479,10 @@ app.get('/photos/:id', async (c) => {
     return c.json({ error: '画像ファイルが見つかりません' }, 404)
   }
 
-  return new Response(object.body, {
-    headers: {
-      'Content-Type': object.httpMetadata?.contentType ?? 'image/jpeg',
-      'Content-Length': String(object.size),
-      'Cache-Control': 'public, max-age=31536000, immutable',
-    },
-  })
+  c.header('Content-Type', object.httpMetadata?.contentType ?? 'image/jpeg')
+  c.header('Content-Length', String(object.size))
+  c.header('Cache-Control', 'public, max-age=31536000, immutable')
+  return c.body(object.body as ReadableStream)
 })
 
 app.all('/mcp', async (c) => {

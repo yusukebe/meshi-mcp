@@ -2,7 +2,7 @@
   "name": "meshi-mcp",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.photos.config.ts",
     "dev": "wrangler dev",
     "deploy": "$npm_execpath run build && wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings"
