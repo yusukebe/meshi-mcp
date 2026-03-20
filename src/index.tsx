@@ -9,6 +9,7 @@ import viewPhotosHtml from '../dist-photos/photos.html'
 type Bindings = {
   DB: D1Database
   IMAGES: R2Bucket
+  AUTH_TOKEN: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -22,7 +23,9 @@ app.use(
   })
 )
 
-const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
+const UNAUTHORIZED = { content: [{ type: 'text' as const, text: 'この操作は管理者（yusukebe）のみ実行できます。閲覧・検索は誰でもできますが、登録・更新・削除は管理者専用です。' }] }
+
+const createServer = (db: D1Database, images: R2Bucket, baseUrl: string, isAdmin: boolean, authToken?: string) => {
   const server = new McpServer({
     name: 'meshi-mcp',
     version: '0.1.0',
@@ -48,6 +51,7 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
       },
     },
     async ({ name, area, genre, memo, rating, google_maps_url }) => {
+      if (!isAdmin) return UNAUTHORIZED
       const result = await db
         .prepare(
           'INSERT INTO restaurants (name, area, genre, memo, rating, google_maps_url) VALUES (?, ?, ?, ?, ?, ?)'
@@ -175,6 +179,7 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
       },
     },
     async ({ id, ...fields }) => {
+      if (!isAdmin) return UNAUTHORIZED
       const sets: string[] = []
       const params: (string | number)[] = []
 
@@ -208,6 +213,7 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
       },
     },
     async ({ id }) => {
+      if (!isAdmin) return UNAUTHORIZED
       await db.prepare('DELETE FROM restaurants WHERE id = ?').bind(id).run()
       return { content: [{ type: 'text' as const, text: `ID ${id} を削除しました` }] }
     }
@@ -263,11 +269,13 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
       outputSchema: z.object({
         restaurant_id: z.number(),
         upload_base_url: z.string(),
+        auth_token: z.string().optional(),
         message: z.string(),
       }),
       _meta: { ui: { resourceUri: uploadResourceUri } },
     },
     async ({ restaurant_id }) => {
+      if (!isAdmin) return UNAUTHORIZED
       const restaurant = await db.prepare('SELECT id, name FROM restaurants WHERE id = ?').bind(restaurant_id).first()
       if (!restaurant) {
         return { content: [{ type: 'text' as const, text: `ID ${restaurant_id} の飯屋は見つかりませんでした` }] }
@@ -275,7 +283,7 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
       const r = restaurant as Record<string, unknown>
       return {
         content: [{ type: 'text' as const, text: `${r.name} の写真アップロードUIを表示中` }],
-        structuredContent: { restaurant_id, upload_base_url: baseUrl, message: `${r.name} への写真アップロード` },
+        structuredContent: { restaurant_id, upload_base_url: baseUrl, auth_token: authToken, message: `${r.name} への写真アップロード` },
       }
     }
   )
@@ -406,6 +414,7 @@ const createServer = (db: D1Database, images: R2Bucket, baseUrl: string) => {
       },
     },
     async ({ photo_id }) => {
+      if (!isAdmin) return UNAUTHORIZED
       const photo = await db.prepare('SELECT r2_key FROM photos WHERE id = ?').bind(photo_id).first()
       if (!photo) {
         return { content: [{ type: 'text' as const, text: `ID ${photo_id} の写真は見つかりませんでした` }] }
@@ -433,6 +442,10 @@ app.get('/restaurants/:id/photos', async (c) => {
 
 // 写真アップロード: POST /restaurants/:id/photos (multipart/form-data)
 app.post('/restaurants/:id/photos', async (c) => {
+  const authToken = c.req.query('token') || c.req.header('Authorization')?.replace('Bearer ', '')
+  if (!c.env.AUTH_TOKEN || authToken !== c.env.AUTH_TOKEN) {
+    return c.json({ error: '認証が必要です' }, 401)
+  }
   const restaurantId = Number(c.req.param('id'))
   const restaurant = await c.env.DB.prepare('SELECT id, name FROM restaurants WHERE id = ?').bind(restaurantId).first()
   if (!restaurant) {
@@ -488,7 +501,9 @@ app.get('/photos/:id', async (c) => {
 app.all('/mcp', async (c) => {
   const url = new URL(c.req.url)
   const baseUrl = `${url.protocol}//${url.host}`
-  const server = createServer(c.env.DB, c.env.IMAGES, baseUrl)
+  const token = c.req.query('token') || c.req.header('Authorization')?.replace('Bearer ', '')
+  const isAdmin = !!c.env.AUTH_TOKEN && token === c.env.AUTH_TOKEN
+  const server = createServer(c.env.DB, c.env.IMAGES, baseUrl, isAdmin, isAdmin ? token : undefined)
   const transport = new WebStandardStreamableHTTPServerTransport()
   await server.connect(transport)
   return transport.handleRequest(c.req.raw)

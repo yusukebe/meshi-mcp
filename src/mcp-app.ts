@@ -8,6 +8,7 @@ const statusDiv = document.getElementById('status') as HTMLDivElement
 
 let restaurantId: number | null = null
 let uploadBaseUrl: string | null = null
+let authToken: string | null = null
 
 const app = new App({ name: 'Meshi Photo Upload', version: '1.0.0' })
 
@@ -40,6 +41,9 @@ app.ontoolresult = (result) => {
   if (sc?.upload_base_url) {
     uploadBaseUrl = sc.upload_base_url as string
   }
+  if (sc?.auth_token) {
+    authToken = sc.auth_token as string
+  }
 }
 
 uploadBtn.addEventListener('click', async () => {
@@ -59,7 +63,9 @@ uploadBtn.addEventListener('click', async () => {
     if (caption) formData.append('caption', caption)
 
     const base = uploadBaseUrl || 'https://meshi-mcp.yusukebe.workers.dev'
-    const res = await fetch(`${base}/restaurants/${restaurantId}/photos`, {
+    const url = new URL(`${base}/restaurants/${restaurantId}/photos`)
+    if (authToken) url.searchParams.set('token', authToken)
+    const res = await fetch(url.toString(), {
       method: 'POST',
       body: formData,
     })
@@ -67,11 +73,6 @@ uploadBtn.addEventListener('click', async () => {
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json() as { id: number }
     setStatus(`アップロード完了！(photo_id: ${data.id})`, 'success')
-
-    await app.sendMessage({
-      role: 'user',
-      content: [{ type: 'text', text: `写真をアップロードしました (photo_id: ${data.id})` }],
-    }).catch(() => {})
   } catch (e) {
     setStatus(`エラー: ${(e as Error).message}`, 'error')
     uploadBtn.disabled = false
